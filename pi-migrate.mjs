@@ -426,11 +426,33 @@ function migrate(argv) {
   console.log(`Report: ${join(outDir,'MIGRATION_REPORT.md')}`);
   console.log(`Verifier prompt: ${join(outDir,'VERIFY_WITH_AGENT.md')}`);
 }
+function verifyTsExtensions(dir, pkg, ok) {
+  const rels = pkg?.pi?.extensions || [];
+  const files = [];
+  for (const rel of rels) {
+    const p = join(dir, rel.replace(/^\.\//, ''));
+    if (!existsSync(p)) continue;
+    const st = statSync(p);
+    if (st.isDirectory()) walk(p, f => f.endsWith('.ts'), files);
+    else if (p.endsWith('.ts')) files.push(p);
+  }
+  if (!files.length) return;
+  const npx = trySh('npx', ['--version'], { timeout: 30000 });
+  if (!npx.ok) {
+    ok('extensions:typescript-compile', false, 'npx unavailable; cannot type-check extension event/resource APIs');
+    return;
+  }
+  for (const file of files) {
+    const r = trySh('npx', ['--yes', 'tsc', '--noEmit', '--skipLibCheck', '--moduleResolution', 'node', '--module', 'esnext', '--target', 'es2022', '--types', 'node', file], { timeout: 120000 });
+    ok(`extension-ts:${relative(dir, file)}`, r.ok, (r.stderr || r.stdout).split('\n').slice(0, 3).join(' '));
+  }
+}
 function verify(argv) {
   const dir=resolve(argv[1]||'.'); const pkg=readJson(join(dir,'package.json')); const results=[];
   const ok=(n,b,d='')=>results.push([n,b,d]);
   ok('package.json', !!pkg); ok('pi manifest', !!pkg?.pi); ok('pi-package keyword', pkg?.keywords?.includes('pi-package'));
   for (const k of ['skills','prompts','agents','extensions']) if (pkg?.pi?.[k]) for (const rel of pkg.pi[k]) ok(`${k}:${rel}`, existsSync(join(dir,rel.replace(/^\.\//,''))));
+  verifyTsExtensions(dir, pkg, ok);
   ok('migration report', existsSync(join(dir,'MIGRATION_REPORT.md'))); ok('verifier prompt', existsSync(join(dir,'VERIFY_WITH_AGENT.md')));
   for (const [n,b,d] of results) console.log(`${b?'OK':'FAIL'} ${n}${d?' '+d:''}`);
   console.log(`Summary: ${results.filter(x=>x[1]).length}/${results.length}`);
