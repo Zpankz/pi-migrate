@@ -39,3 +39,11 @@ Persistent learnings extracted from pi-migrate verification and repair passes. N
 - Generalizable fix: translate known Claude model aliases during agent migration (`opus` -> `gpt-5.5`, `sonnet` -> `deepseek-v4-pro`, `haiku` -> `deepseek-v4-flash`) and make verification fail if legacy aliases remain. Treat every Claude-specific model/tool/hook/command assumption as a compatibility surface that must be adapted, not copied blindly.
 - Exact CLI improvement made: `pi-migrate.mjs` now normalizes `model:` frontmatter in migrated agent markdown and `verify` checks `pi.agents` resources for remaining legacy model aliases.
 - Git commit/push status: no git repository was present at `/Users/mikhail/.pi/agent/extensions/pi-migrate`; run `git init`, add a remote, commit, and push if this package should be versioned independently.
+
+## 2026-05-04 — MCP namespace blind copy and package.json gaps
+
+- Surprising failure mode: `mcp__chrome-devtools__*` and `mcp__claude-in-chrome__*` references survived verbatim in migrated AGENTS.md (from CLAUDE.md) because the migrator copied content without detecting Claude-specific `mcp__` tool namespaces. The verifier passed 6/6 because it only checks manifest shape (file existence, JSON keys), not content for Claude-specific syntax.
+- Likely cause: migrator treats CLAUDE.md → AGENTS.md as a simple rename with no content adaptation. MCP tool namespace references require either Pi-equivalent bridge generation (mcporter) or an MCP_CLI_FALLBACK.md documenting the `mcp tools`/`mcp call` CLI fallback.
+- Generalizable fix: (a) scan AGENTS.md content for `mcp__` patterns and either generate `docs/MCP_CLI_FALLBACK.md` or flag the file as partial; (b) always add `"pi"` keyword to migrated package.json keywords; (c) when creating docs directories during repair, register `pi.docs` in package.json manifest.
+- Exact CLI improvement proposed: `verify` should scan migrated AGENTS.md for `mcp__` references and flag them as partial/Claude-specific until adaptation notes or fallback docs exist. `migrate` should auto-generate `docs/MCP_CLI_FALLBACK.md` when source CLAUDE.md or `.mcp.json` references MCP servers.
+- Git commit/push status: pi-migrate is in a git repo at `/Users/mikhail/.pi/agent/extensions/pi-migrate`; commit and push pending.
