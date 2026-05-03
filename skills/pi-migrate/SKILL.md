@@ -30,6 +30,8 @@ Use this skill to migrate a Claude Code plugin, and later Codex/Gemini/OpenCode-
 - If source has `.mcp.json`, convert each MCP server with `mcporter generate-cli`.
 - Pi skills must call generated CLI bridges, not native MCP tools.
 - Any resource that cannot be fully translated must be flagged in `MIGRATION_REPORT.md` as partial or failed.
+- Migrated agents must use Pi-available model identifiers. Translate Claude aliases during migration: `opus` -> `gpt-5.5`, `sonnet` -> `deepseek-v4-pro`, `haiku` -> `deepseek-v4-flash`; verification should fail if those aliases remain.
+- Do not assume bespoke Claude Code functions are available in Pi. Adapt tool names, hook events, slash-command semantics, and runtime-specific behavior instead of copying them blindly.
 - Non-Claude hook manifests (for example `.github/hooks/*.json`, `.codex/hooks.json`, `.cursor/hooks.json`, `.gemini/settings.json`) must be preserved and flagged for explicit native-Pi behavior verification if they are not automatically translated.
 - If verification discovers a reusable failure pattern, improve `pi-migrate` itself and append the compact learning to `MIGRATOR_LEARNINGS.md`.
 - After improving `pi-migrate`, run `git status`; if the migrator root is inside a git repository with a remote, commit and push. If no git remote exists, report the exact commands needed instead.

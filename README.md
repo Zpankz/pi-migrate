@@ -40,7 +40,7 @@ pi-migrate verify ~/.pi/agent/packages/code-review-graph-pi
 
 - `skills/`, `.claude/skills/` → `pi.skills`
 - `commands/`, `.claude/commands/`, `prompts/` → `pi.prompts`
-- `agents/`, `.claude/agents/` → `pi.agents` (via `@fractary/pi-claude-code` and `pi-subagents`)
+- `agents/`, `.claude/agents/` → `pi.agents` (via `@fractary/pi-claude-code` and `pi-subagents`), with Claude Code model aliases translated to Pi-available models (`opus` → `gpt-5.5`, `sonnet` → `deepseek-v4-pro`, `haiku` → `deepseek-v4-flash`)
 - `extensions/` → `pi.extensions`
 - `CLAUDE.md`, `.claude/CLAUDE.md`, `AGENTS.md` → package `AGENTS.md`
 - `.mcp.json` → `mcporter` generated CLI bridges in package `bin/`, plus `docs/MCP_CLI_FALLBACK.md` for direct `mcp` CLI discovery/debugging
@@ -76,9 +76,10 @@ Hooks that call project-local agent scripts such as `.claude/hooks/*` or `.curso
 
 ## Functional migration requirement
 
-A successful migration means the plugin's *normal behavior* works for Pi, not merely that Pi can load copied resources. `pi-migrate` therefore flags source-level gaps when it detects provider/model layers, CLI binaries, or per-agent config generators. These require runtime adaptation, for example:
+A successful migration means the plugin's *normal behavior* works for Pi, not merely that Pi can load copied resources. `pi-migrate` therefore flags source-level gaps when it detects provider/model layers, CLI binaries, or per-agent config generators. It must not assume Claude Code model aliases, tool names, hook events, slash-command semantics, or other bespoke Claude Code functions are available in Pi. These require runtime adaptation, for example:
 
 - provider adapters should inherit Pi's default provider/model/auth instead of requiring separate API keys;
+- agent frontmatter should use Pi-available model identifiers, not raw Claude aliases;
 - setup/init flows should accept `pi` where they accept other agent targets;
 - generated outputs should land in Pi-compatible locations such as global `~/.pi/agent` package resources or project `AGENTS.md` / `.agents/skills/`.
 

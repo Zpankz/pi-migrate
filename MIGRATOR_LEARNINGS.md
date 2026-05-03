@@ -31,3 +31,11 @@ Persistent learnings extracted from pi-migrate verification and repair passes. N
 - Generalizable fix: `pi-migrate verify` should compile migrated `.ts` extension resources with `tsc --noEmit --skipLibCheck` so unsupported events/resources fail before install validation is considered complete.
 - Exact CLI improvement made: verifier now scans `pi.extensions` resources for `.ts` files and runs `npx --yes tsc --noEmit --skipLibCheck --moduleResolution node --module esnext --target es2022 --types node <file>` per file.
 - Git commit/push status: no git repository was present at /Users/mikhail/.pi/agent/extensions/pi-migrate; version manually if desired.
+
+## 2026-05-03 — Claude model aliases and bespoke surfaces
+
+- Surprising failure mode: migrated ECC agents kept Claude Code model aliases (`opus`, `sonnet`, `haiku`), which routed to unavailable provider backends in Pi and caused workflow agents to fail before review/planning work began.
+- Likely cause: migrator copied agent markdown verbatim and assumed Claude Code model aliases and bespoke runtime surfaces would exist in Pi.
+- Generalizable fix: translate known Claude model aliases during agent migration (`opus` -> `gpt-5.5`, `sonnet` -> `deepseek-v4-pro`, `haiku` -> `deepseek-v4-flash`) and make verification fail if legacy aliases remain. Treat every Claude-specific model/tool/hook/command assumption as a compatibility surface that must be adapted, not copied blindly.
+- Exact CLI improvement made: `pi-migrate.mjs` now normalizes `model:` frontmatter in migrated agent markdown and `verify` checks `pi.agents` resources for remaining legacy model aliases.
+- Git commit/push status: no git repository was present at `/Users/mikhail/.pi/agent/extensions/pi-migrate`; run `git init`, add a remote, commit, and push if this package should be versioned independently.

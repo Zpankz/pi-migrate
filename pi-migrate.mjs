@@ -8,6 +8,11 @@ import { fileURLToPath } from 'node:url';
 const HOME = homedir();
 const DEFAULT_OUT = join(HOME, '.pi/agent/packages');
 const MIGRATOR_ROOT = dirname(fileURLToPath(import.meta.url));
+const MODEL_ALIAS_MAP = new Map([
+  ['opus', 'gpt-5.5'],
+  ['sonnet', 'deepseek-v4-pro'],
+  ['haiku', 'deepseek-v4-flash'],
+]);
 
 function usage() {
   console.log(`pi-migrate — migrate agent plugin/extension/app repos to native Pi packages\n\nUsage:\n  pi-migrate {gh-repo|url|local} [--name <pkg>] [--out <dir>] [--install] [--force]\n  pi-migrate migrate {gh-repo|url|local} [--name <pkg>] [--out <dir>] [--install] [--force]\n  pi-migrate inspect {gh-repo|url|local} [--name <pkg>]\n  pi-migrate verify <package-dir>\n\nExamples:\n  pi-migrate tirth8205/code-review-graph --install\n  pi-migrate https://github.com/tirth8205/code-review-graph --install\n  pi-migrate inspect ./my-claude-plugin\n  pi-migrate verify ~/.pi/agent/packages/code-review-graph-pi\n\nWhat it migrates now:\n  - Claude Code plugin resources: skills/ and .claude/skills -> Pi skills\n  - commands/ and .claude/commands -> Pi prompts\n  - agents/ and .claude/agents -> pi.agents (requires pi-claude-code + pi-subagents)\n  - .mcp.json MCP servers -> mcporter-generated CLI bridges + deterministic instructions\n  - Claude settings hooks -> Pi extension hooks when safely translatable\n  - CLAUDE.md / AGENTS.md -> Pi AGENTS.md package instructions\n  - Generates MIGRATION_REPORT.md and VERIFY_WITH_AGENT.md
@@ -47,6 +52,40 @@ function walk(dir, pred=()=>true, acc=[]) {
 }
 function readJson(p) { try { return JSON.parse(readFileSync(p,'utf8')); } catch { return null; } }
 function writeJson(p, obj) { writeFileSync(p, JSON.stringify(obj,null,2)+'\n'); }
+function normalizeAgentModelValue(value) {
+  const raw = String(value || '').trim();
+  const quote = raw.startsWith('"') && raw.endsWith('"') ? '"' : raw.startsWith("'") && raw.endsWith("'") ? "'" : '';
+  const unquoted = raw.replace(/^['"]|['"]$/g, '');
+  const replacement = MODEL_ALIAS_MAP.get(unquoted);
+  return replacement ? `${quote}${replacement}${quote}` : raw;
+}
+function normalizeAgentModelsInDir(dir, report) {
+  if (!existsSync(dir)) return 0;
+  let changed = 0;
+  for (const file of walk(dir, p => p.endsWith('.md'))) {
+    const before = readFileSync(file, 'utf8');
+    const after = before.replace(/^model:\s*(.+)$/gm, (line, value) => {
+      const next = normalizeAgentModelValue(value);
+      if (next !== String(value).trim()) changed += 1;
+      return `model: ${next}`;
+    });
+    if (after !== before) writeFileSync(file, after);
+  }
+  if (changed > 0) report.migrated.push(`agent model aliases -> Pi models (${changed})`);
+  return changed;
+}
+function legacyAgentModelAliases(dir) {
+  if (!existsSync(dir)) return [];
+  const aliases = [];
+  for (const file of walk(dir, p => p.endsWith('.md'))) {
+    const text = readFileSync(file, 'utf8');
+    for (const match of text.matchAll(/^model:\s*(.+)$/gm)) {
+      const value = String(match[1]).trim().replace(/^['"]|['"]$/g, '');
+      if (MODEL_ALIAS_MAP.has(value)) aliases.push(relative(dir, file));
+    }
+  }
+  return [...new Set(aliases)];
+}
 function normalizeSource(src) {
   if (existsSync(src)) return resolve(src);
   if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/.test(src)) return `https://github.com/${src.replace(/\.git$/, '')}.git`;
@@ -394,7 +433,7 @@ function migrate(argv) {
   analyzeFunctionalGaps(srcRoot, d, report);
   for (const rel of d.dirs.skills) { copyIfExists(join(srcRoot,rel), join(outDir,'skills')); report.migrated.push(`${rel} -> skills`); break; }
   for (const rel of d.dirs.prompts) { copyIfExists(join(srcRoot,rel), join(outDir,'prompts')); report.migrated.push(`${rel} -> prompts`); break; }
-  for (const rel of d.dirs.agents) { copyIfExists(join(srcRoot,rel), join(outDir,'agents')); report.migrated.push(`${rel} -> agents`); break; }
+  for (const rel of d.dirs.agents) { copyIfExists(join(srcRoot,rel), join(outDir,'agents')); report.migrated.push(`${rel} -> agents`); normalizeAgentModelsInDir(join(outDir,'agents'), report); break; }
   for (const rel of d.dirs.extensions) { copyIfExists(join(srcRoot,rel), join(outDir,'extensions')); report.migrated.push(`${rel} -> extensions`); break; }
   copyHookManifestsForAudit(srcRoot, d.files.hookManifests, outDir, report);
   if (d.files.claudeMd) { copyIfExists(join(srcRoot,d.files.claudeMd), join(outDir,'AGENTS.md')); report.migrated.push(`${d.files.claudeMd} -> AGENTS.md`); }
@@ -452,6 +491,10 @@ function verify(argv) {
   const ok=(n,b,d='')=>results.push([n,b,d]);
   ok('package.json', !!pkg); ok('pi manifest', !!pkg?.pi); ok('pi-package keyword', pkg?.keywords?.includes('pi-package'));
   for (const k of ['skills','prompts','agents','extensions']) if (pkg?.pi?.[k]) for (const rel of pkg.pi[k]) ok(`${k}:${rel}`, existsSync(join(dir,rel.replace(/^\.\//,''))));
+  if (pkg?.pi?.agents) {
+    const aliases = pkg.pi.agents.flatMap(rel => legacyAgentModelAliases(join(dir, rel.replace(/^\.\//,''))));
+    ok('agents:model-aliases-migrated', aliases.length === 0, aliases.length ? `legacy model aliases remain in ${aliases.slice(0, 10).join(', ')}` : '');
+  }
   verifyTsExtensions(dir, pkg, ok);
   ok('migration report', existsSync(join(dir,'MIGRATION_REPORT.md'))); ok('verifier prompt', existsSync(join(dir,'VERIFY_WITH_AGENT.md')));
   for (const [n,b,d] of results) console.log(`${b?'OK':'FAIL'} ${n}${d?' '+d:''}`);
